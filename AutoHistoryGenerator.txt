@@ -1,0 +1,96 @@
+/* Questo script genera il testo dello storico e mette sul hyperlink di ogni elemento. Gli elementi esclusi sono _Forz e ProgOr_ */
+
+
+    public void onStart() throws Exception {
+    }
+
+    public void onExecute() throws Exception {
+        BIFile file;
+        try {
+            //Prende il file px e lo apre con un parser xml esistente su Niagara
+            file = (BIFile) getPxOrd().get();
+            XParser parser = XParser.make(file.getInputStream());
+            XElem root = parser.parse();
+            //Va nell'oggetto <content>
+            XElem element = root.elem(1);
+            //Prende il primo elemento in content
+            element = element.elem(0);
+            //Vede se il primo elemento è un canvas pane. Altrimenti dovrebbe esistere qualche layout sopra canvas pane come schroll pane.
+            //Se non è uno di questi casi, allora genera errore.
+            if (!element.name().equals("CanvasPane"))
+                element = element.elem(0);
+            if (!element.name().equals("CanvasPane"))
+                setOut("The PX Format Is Incorrect !!");
+            else {
+                setOut("The PX Format Is Correct...");
+                //Prende tutti gli elementi sotto canvas pane.
+                XElem[] elements = element.elems();
+                //Ci servono : nome del punto, nome dello station del punto che potrebbe lo station locale oppure può essere uno station da remoto.
+                String thisStationName = Sys.getStation().getStationName();
+                String pointStationName = "";
+                String pointName = "";
+                XElem currentSubElem;
+                for (XElem subElem : elements) {
+                    try {
+                        //Prende il primo elemento sotto l'elemento padre. Questo è per il fatto che ogni oggetto binding si trova nel primo elemento.
+                        currentSubElem = subElem.elem(0);
+                        System.out.println(currentSubElem.attrName(0)); 
+                        System.out.println(currentSubElem.name().isEmpty());
+                        //Vede se esiste una proprietà del binding. Altrimenti non tocca l'elemento.
+                        if ((currentSubElem.name().contains("BoundLabelBinding") || currentSubElem.name().contains("ValueBinding")) && currentSubElem.attrName(0).equals("ord")) {
+                            String ord = "";
+                            try {
+                                // Prende la proprietà ord in oggetto binding e se non c'è, lo ignora.
+                                ord = currentSubElem.get("ord").toString();
+                            } catch (XException e) {
+                            }
+                            if (ord != null) {
+                                //Divide ord rispetto a "/" e prende nome del punto.
+                                String[] ordArray = ord.split("/");
+                                pointName = ordArray[ordArray.length - 1];
+                                //Ignora alcuni punti scritto nel dettagli dello script
+                                if (!pointName.substring(pointName.length() - 6).contains("Forz") && !pointName.substring(0, 4).contains("Prog") ) {
+                                    //Se il punto è un punto locale, prende il nome dello station locale altrimenti prende il nome dello station remoto.
+                                    if(getRemoto()== true){
+                                    if (ordArray[1].equals("Drivers")) {
+                                        int stationIndex = indexOf(ordArray, "points") - 1;
+                                        if (stationIndex < 0)
+                                            setOut("Something Went Wrong ! The Ord That Have 'Drivers' Doesn't Contain 'points'...");
+                                        else
+                                            pointStationName = ordArray[stationIndex];
+                                            }
+                                    } else
+                                        pointStationName = thisStationName;
+                                    //Crea il testo dello storico e lo inserisce come un'attributo.
+                                    String preparedHistory = "history:" + "/" + pointStationName + "/" + pointName;
+                                    currentSubElem.setAttr("hyperlink", preparedHistory);
+                                }
+                            }
+                        }
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                        // Alcuni oggetti non hanno oggetti figli. per Esempio un pxInclude.
+                        System.out.println("Current Element Doesn't Have A Sub Element To Work On !!");
+                    }
+                }
+                //Scrive XML modificato nello stesso file dato.
+                XWriter writer = new XWriter(file.getOutputStream());
+                root.write(writer);
+                writer.flush();
+                writer.close();
+            }
+        } catch (Exception e) {
+            setOut("Cannot Load The Script !! The Problem Could Be The Px Ord ...");
+        }
+    }
+
+    public void onStop() throws Exception {
+    }
+
+    //Funzione per trovare l'indice di un elemento stringa.
+    public int indexOf(String[] array, String value) {
+        for (int i = 0; i < array.length; i++) {
+            if (array[i].equals(value))
+                return i;
+        }
+        return -99;
+    }
